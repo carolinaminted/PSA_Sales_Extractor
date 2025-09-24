@@ -58,15 +58,15 @@ function ingestPsaSales() {
  */
 function parsePsaEmail_(msg) {
   const bodyText = (msg.getPlainBody() || '').replace(/\r/g, '');
-  const warnings = []; // NEW: Array to hold names of missing fields.
+  const warnings = [];
 
   try {
-    // Regex to find key information
-    const certRegex = /(?:PSA|CGC) CERT\s*([0-9]+)/i;
+    // MODIFIED: Added 'BGS' to the list of accepted grading companies.
+    const certRegex = /(?:PSA|CGC|BGS) CERT\s*([0-9]+)/i;
     const salePriceRegex = /Sale Price\s*\$([0-9.,]+)/i;
     const proceedsRegex = /Proceeds\s*\$([0-9.,]+)/i;
-    // MODIFIED: Made the timezone part of the regex more flexible to accept 2-4 letters or be absent.
-    const endedRegex = /Listing Ended\s*([A-Za-z]{3}\s\d{1,2},\s\d{1,2}:\d{2}\s[AP]M(?:\s[A-Z]{2,4})?)/i;
+    // MODIFIED: Made date regex more flexible to handle odd line breaks and wording.
+    const endedRegex = /(?:Listing\s*)?Ended\s*[\s\S]*?([A-Za-z]{3}\s\d{1,2},?\s\d{1,2}:\d{2}\s[AP]M(?:\s[A-Z]{2,4})?)/i;
     
     // Extract raw values
     const certMatch = bodyText.match(certRegex);
@@ -74,7 +74,6 @@ function parsePsaEmail_(msg) {
     const proceedsMatch = bodyText.match(proceedsRegex);
     const endedMatch = bodyText.match(endedRegex);
 
-    // NEW: Safely extract each value, or set to null if not found.
     const certNumber = certMatch ? certMatch[1] : null;
     if (!certNumber) warnings.push('Certification Number');
 
@@ -87,23 +86,19 @@ function parsePsaEmail_(msg) {
     const saleDateStr = endedMatch ? endedMatch[1] : null;
     if (!saleDateStr) warnings.push('Listing Ended Date');
 
-    // NEW: Only calculate fees if both source values exist.
     const feesPaid = (soldAmount !== null && netProceeds !== null) ? round2(soldAmount - netProceeds) : null;
     
-    // NEW: Only format the date if it was found.
-    const saleDate = saleDateStr ? Utilities.formatDate(new Date(saleDateStr), Session.getScriptTimeZone(), 'yyyy-MM-dd') : null;
+    const saleDate = saleDateStr ? Utilities.formatDate(new Date(saleDateStr.replace(',', '')), Session.getScriptTimeZone(), 'yyyy-MM-dd') : null;
     
-    // Extract card title (this logic remains the same)
     let cardTitle = null;
     if (certMatch) {
       const titleRegex = new RegExp(`${certMatch[0]}\\s*([\\s\\S]*?)\\s*Sale Price`, 'im');
       const titleMatch = bodyText.match(titleRegex);
       cardTitle = titleMatch ? titleMatch[1].replace(/\s+/g, ' ').trim() : msg.getSubject();
     } else {
-      cardTitle = msg.getSubject(); // Fallback to subject if cert number is missing
+      cardTitle = msg.getSubject();
     }
     
-    // NEW: Log a detailed warning if any fields were missing.
     if (warnings.length > 0) {
       console.warn(`Partially processed message ${msg.getId()}: Missing field(s): [${warnings.join(', ')}]`);
     }
@@ -118,22 +113,16 @@ function parsePsaEmail_(msg) {
     };
   } catch (e) {
     console.error(`Failed to parse message ${msg.getId()}: ${e.message}`);
-    return null; // Return null on a critical, unexpected error
+    return null;
   }
 }
 
-/**
- * Loads existing Gmail message IDs from the sheet to prevent duplicates.
- * Assumes the Message ID is in the 7th column (Column G).
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The target sheet.
- * @return {Set<string>} A Set containing all existing message IDs.
- */
 function loadExistingMessageIds_(sheet) {
-  const idCol = 7; // Column G
+  const idCol = 7;
   const lastRow = sheet.getLastRow();
   const set = new Set();
   if (lastRow >= 2) {
-    sheet.getRange(2, 1, lastRow - 1, 1).getValues().forEach(r => {
+    sheet.getRange(2, idCol, lastRow - 1, 1).getValues().forEach(r => {
       const v = (r[0] || '').toString().trim();
       if (v) set.add(v);
     });
@@ -141,11 +130,6 @@ function loadExistingMessageIds_(sheet) {
   return set;
 }
 
-/**
- * Utility function to round a number to 2 decimal places.
- * @param {number} n The number to round.
- * @return {number} The rounded number.
- */
 function round2(n) { 
   return Math.round((n + Number.EPSILON) * 100) / 100; 
 }
