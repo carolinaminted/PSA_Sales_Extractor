@@ -2,7 +2,7 @@
  * CONFIG
  ***********************/
 const LABEL_NAME_PDF = 'PSA Sales'; // Gmail label to ingest
-const DRIVE_FOLDER_PATH = 'Sales/PSA/Extracted PDFs'; // Path from My Drive root
+const DRIVE_FOLDER_PATH = 'PSA/Extracted PDFs'; // Path from My Drive root
 const MAX_PER_RUN_PDF = 100; // Safety cap per run
 const LOG_SHEET = 'ProcessedPDFs'; // Helper sheet for dedupe
 
